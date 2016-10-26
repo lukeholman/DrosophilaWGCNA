@@ -31,7 +31,7 @@ discard.redundant.probes <- function(ned){
 
 
 
-# Runs linear models on every gene, in order to compute a sexual antagonism score for each one
+# Runs linear models on every gene, in order to compute a sexual antagonism score for each one (uses I+M 2010 Evolution formula for index 'I')
 # Note that I don't need to correct for 'block', because I am dealing in line mean fitness and line mean transcript abundance. The 4 blocks are perfectly balanced with respect to line and sex.
 compute.SA.score.per.gene <- function(ned, sampleID){
   # Find the hemiclone mean expression level for each probe
@@ -54,48 +54,36 @@ compute.SA.score.per.gene <- function(ned, sampleID){
   female.slopes <- sapply(1:ncol(female.clone.means), function(i) as.numeric(lm(female.fitness.by.clone ~ female.clone.means[,i])$coefficients[2]))
   male.slopes <- sapply(1:ncol(male.clone.means), function(i) as.numeric(lm(male.fitness.by.clone ~ male.clone.means[,i])$coefficients[2]))
   
-  # NOT IMPLEMENTED
-  # # Determine if the male and female slopes are significantly different, by testing if the interaction with sex is significant. Sample size is 15 lines
-  # interaction.pvals <- numeric(ncol(female.clone.means))
-  # for(i in 1:ncol(female.clone.means)){
-  #   fitness <- c(female.fitness.by.clone, male.fitness.by.clone)
-  #   sex <- c(rep("F", length(female.fitness.by.clone)), rep("M", length(male.fitness.by.clone)))
-  #   mean.transcript <- c(female.clone.means[,i], male.clone.means[,i])
-  #   interaction.pvals[i] <- summary(lm(fitness ~ mean.transcript * sex))$coefficients[4,4]   # Save the interaction term p-value
-  # }
-  # interaction.pvals <- p.adjust(interaction.pvals, method = "fdr") # Adjust the p-values using Benjamini-Hochberg false discovery rate correction (same as Innocenti and Morrow)
-
-  # Compute the SA score for each transcript
+  # Compute the Innocenti and Morrow's index for each transcript
   SA.score <- numeric(length(female.slopes))
-  for(i in 1:length(female.slopes)) if(sign(female.slopes[i] * male.slopes[i]) == -1) SA.score[i] <- sqrt(abs(female.slopes[i]) * abs(male.slopes[i]))
+  for(i in 1:length(female.slopes)) {
+    SA.score[i] <- (female.slopes[i] * male.slopes[i]) / sqrt((female.slopes[i]^2 + male.slopes[i]^2) / 2)
+  }
   
   # For the SA genes, record whether higher expression levels benefit females or males. "Female genes" are ones where females are selected for higher expression, males lower, and vice versa for "male genes"
   gene.gender <- rep(" ", length(SA.score))
-  gene.gender[female.slopes > 0 & SA.score > 0] <- "Female"
-  gene.gender[male.slopes > 0 & SA.score > 0] <- "Male"
+  gene.gender[female.slopes > 0 & male.slopes < 0] <- "Female"
+  gene.gender[male.slopes > 0 & female.slopes < 0] <- "Male"
   
-  # # Make a column of SIGNIFICANTLY sexually antagonistic genes. These are defined as those with a significant, FDR-corrected sex interaction, and a non-zero SA score
-  # is.SA <- rep(0, ncol(female.clone.means))
-  # is.SA[interaction.pvals < 0.05 & SA.score > 0] <- 1
-  
-  return(data.frame(SA.score=SA.score, gene.gender = gene.gender))
+  return(data.frame(SA.score = SA.score, gene.gender = gene.gender))
 }
 
+
 # Clean up the dN/dS data kindly provided by C. Fan into a more R-like format
-clean.up.fan.files <- function(fan.file){
-  dd<-read.delim(fan.file, header=F, sep = "=")
-  names(dd) <- c("flybaseID", "t", "S", "N", "dNdS", "dN", "dS")
-  dd$flybaseID <- gsub("\tt", "", dd$flybaseID)
-  dd <- as.data.frame(apply(dd, c(1,2), function(x) gsub(" ", "", x)))
-  dd$t <- gsub("S", "", dd$t)
-  dd$S <- gsub("N", "", dd$S)
-  dd$N <- gsub("dN/dS", "", dd$N)
-  dd$dNdS <- gsub("dN", "", dd$dNdS)
-  dd$dN <- gsub("dS", "", dd$dN)
-  split.ID <- strsplit(dd$flybaseID, split="_")
-  dd$flybaseID <- sapply(split.ID, function(x) x[1])
-  return(dd)
-}
+# clean.up.fan.files <- function(fan.file){
+#   dd<-read.delim(fan.file, header=F, sep = "=")
+#   names(dd) <- c("flybaseID", "t", "S", "N", "dNdS", "dN", "dS")
+#   dd$flybaseID <- gsub("\tt", "", dd$flybaseID)
+#   dd <- as.data.frame(apply(dd, c(1,2), function(x) gsub(" ", "", x)))
+#   dd$t <- gsub("S", "", dd$t)
+#   dd$S <- gsub("N", "", dd$S)
+#   dd$N <- gsub("dN/dS", "", dd$N)
+#   dd$dNdS <- gsub("dN", "", dd$dNdS)
+#   dd$dN <- gsub("dS", "", dd$dN)
+#   split.ID <- strsplit(dd$flybaseID, split="_")
+#   dd$flybaseID <- sapply(split.ID, function(x) x[1])
+#   return(dd)
+# }
 
 
 # Function to set up data in the required formats - this keeps the main scripts neat and readable
@@ -200,54 +188,54 @@ power.picker.plot <- function(ned, powers){
 # Function to calculate a big correlation matrix in chunks (when it's too big to do in R's memory)
 # Adapted from http://www.r-bloggers.com/bigcor-large-correlation-matrices-in-r/ - I corrected a typo involving MAT, and I added 2 lines (annotated)
 # I use this because the built-in WGCNA functions for getting connectivity tend to fail for my dataset, since the correlation matrix is too big.
-bigcor <- function(x, nblocks = 10, verbose = TRUE, make.dissimilarity=F, power)
-{
-  library(ff, quietly = TRUE)
-  NCOL <- ncol(x)
-  
-  ## test if ncol(x) %% nblocks gives remainder 0
-  if (NCOL %% nblocks != 0) stop("Choose different 'nblocks' so that ncol(x) %% nblocks = 0!")
-  
-  ## preallocate square matrix of dimension
-  ## ncol(x) in 'ff' single format
-  corMAT <- ff(vmode = "single", dim = c(NCOL, NCOL))
-  
-  ## split column numbers into 'nblocks' groups
-  SPLIT <- split(1:NCOL, rep(1:nblocks, each = NCOL/nblocks))
-  
-  ## create all unique combinations of blocks
-  COMBS <- expand.grid(1:length(SPLIT), 1:length(SPLIT))
-  COMBS <- t(apply(COMBS, 1, sort))
-  COMBS <- unique(COMBS)
-  
-  ## iterate through each block combination, calculate correlation matrix
-  ## between blocks and store them in the preallocated matrix on both
-  ## symmetric sides of the diagonal
-  for (i in 1:nrow(COMBS)) {
-    COMB <- COMBS[i, ]
-    G1 <- SPLIT[[COMB[1]]]
-    G2 <- SPLIT[[COMB[2]]]
-    if (verbose) cat("Block", COMB[1], "with Block", COMB[2], "\n")
-    flush.console()
-    COR <- cor(x[, G1], x[, G2])
-    
-    # Luke's addition: added abs() and raise by 'power'
-    COR <- abs(COR)^power 
-    
-    # Luke's addition: set this option to true if you'd like to subtract every correlation from 1, to get a dissimilarity matrix instead of a similarity matrix
-    if(make.dissimilarity) COR <- 1 - COR 
-    
-    corMAT[G1, G2] <- COR
-    corMAT[G2, G1] <- t(COR)
-    COR <- NULL
-  }
-  
-  gc()
-  return(corMAT)
-}
+# bigcor <- function(x, nblocks = 10, verbose = TRUE, make.dissimilarity=F, power)
+# {
+#   library(ff, quietly = TRUE)
+#   NCOL <- ncol(x)
+#   
+#   ## test if ncol(x) %% nblocks gives remainder 0
+#   if (NCOL %% nblocks != 0) stop("Choose different 'nblocks' so that ncol(x) %% nblocks = 0!")
+#   
+#   ## preallocate square matrix of dimension
+#   ## ncol(x) in 'ff' single format
+#   corMAT <- ff(vmode = "single", dim = c(NCOL, NCOL))
+#   
+#   ## split column numbers into 'nblocks' groups
+#   SPLIT <- split(1:NCOL, rep(1:nblocks, each = NCOL/nblocks))
+#   
+#   ## create all unique combinations of blocks
+#   COMBS <- expand.grid(1:length(SPLIT), 1:length(SPLIT))
+#   COMBS <- t(apply(COMBS, 1, sort))
+#   COMBS <- unique(COMBS)
+#   
+#   ## iterate through each block combination, calculate correlation matrix
+#   ## between blocks and store them in the preallocated matrix on both
+#   ## symmetric sides of the diagonal
+#   for (i in 1:nrow(COMBS)) {
+#     COMB <- COMBS[i, ]
+#     G1 <- SPLIT[[COMB[1]]]
+#     G2 <- SPLIT[[COMB[2]]]
+#     if (verbose) cat("Block", COMB[1], "with Block", COMB[2], "\n")
+#     flush.console()
+#     COR <- cor(x[, G1], x[, G2])
+#     
+#     # Luke's addition: added abs() and raise by 'power'
+#     COR <- abs(COR)^power 
+#     
+#     # Luke's addition: set this option to true if you'd like to subtract every correlation from 1, to get a dissimilarity matrix instead of a similarity matrix
+#     if(make.dissimilarity) COR <- 1 - COR 
+#     
+#     corMAT[G1, G2] <- COR
+#     corMAT[G2, G1] <- t(COR)
+#     COR <- NULL
+#   }
+#   
+#   gc()
+#   return(corMAT)
+# }
 
 
-# This function calculates the association between mean fitness and mean module eigengenes across hemiclones. Also calcualtes the SA score described in the paper
+# This function calculates the association between mean fitness and mean module eigengenes across hemiclones. Also calculates the I+M2010 index of sex-specific selection I for each module.
 structure.of.selection <- function(MEclones, round=T, consensus=T)
 {
   # First we express the fitness of each clone relative to the average of the 15 clones in this dataset (they are initially expressed relative to the 100 clones in Innocenti and Morrow)
@@ -286,17 +274,16 @@ structure.of.selection <- function(MEclones, round=T, consensus=T)
       compare.models <- anova(lm(fitness ~ ME * sex), lm(fitness ~ ME + sex))
       output$sex.specific.selection.pval[i] <- compare.models[6][2,] # test if the sex-by-eigengene term is significant using a partial F-test
     }
-    if(sign(output$beta.male[i] * output$beta.female[i]) == -1) {
-      output$SA.score[i] <- sqrt(abs(output$beta.male[i]) * abs(output$beta.female[i]))
-      if(output$beta.male[i] > 0) output$advantaged.sex[i] <- "Male"
-      else output$advantaged.sex[i] <- "Female"
-    }
+    
+    # Calculate the SA score for the focal module, following Innocenti and Morrow 2010 Evolution 10.1111/j.1558-5646.2010.01021.x
+    output$SA.score[i] <- with(output, (beta.female[i] * beta.male[i]) / sqrt((beta.female[i]^2 + beta.male[i]^2) / 2))
   }
   output$average.beta <- with(output, rowMeans(cbind(beta.female, beta.male)))
   
   if(round) output[,-1] <- round(output[,-1], 3)
   return(output)
 }
+
 
 
 # Run one MCMCglmm model per module, to calculate heritability of each module and the male-female genetic correlation
@@ -469,7 +456,7 @@ fitness.vs.eigengenes.plot <- function(clone.data, module.data, consensus = F){
   return(grid.arrange(x, bottom = "Hemiclone mean eigengene", left = "Hemiclone mean fitness"))
 }
 
-# NOTE IMPLEMENTED
+# NOT IMPLEMENTED
 # This function calculates the similarity between a specified set of modules in terms of the GO terms of the genes in them
 # cluster.modules.by.GO.semantic.similarity <- function(gene.data, module.column, exclude0 = T){
 #   module <- gene.data[, names(gene.data) == module.column]
@@ -509,22 +496,19 @@ fitness.vs.eigengenes.plot <- function(clone.data, module.data, consensus = F){
 # Plots observed-expected figures by tissue and module
 tissue.enrichment.plot <- function(module.data, module.column){
   
-  module.data <- module.data[module.data$Module != "ME0", ] # Get rid of module zero in both data sets
-  gene.data <- gene.data[gene.data[, names(gene.data) %in% module.column] != 0, ]
-
   focal.module <- gene.data[, names(gene.data) %in% module.column]
   nModules <- max(focal.module)
   tissue <- apply(gene.data[,(which(names(gene.data) == "brain")):(which(names(gene.data) == "trachea"))], 2, function(x) tapply(x, focal.module, sum))
   exp <- t(sapply(rowSums(tissue), function(x) x * colSums(tissue)/sum(colSums(tissue))))
   obs.exp <- melt((tissue - exp)/exp)    # The y-axis shows the number of enriched transcripts - expected, divided by expected.
-  obs.exp <- obs.exp[obs.exp$Var1 != 0,]
-  ranks <- rank(module.data$SA.score)
+  #obs.exp <- obs.exp[obs.exp$Var1 != 0,]
+  ranks <- rank(-module.data$SA.score)
   ranks <- (1+max(ranks)) - ranks
   ranks <- match(1:length(ranks), ranks)
   ranks[is.na(ranks)] <- (1:nModules)[!((1:nModules) %in% ranks)]
-
+  
   obs.exp$title <- paste("Module", obs.exp$Var1)
-  obs.exp$title <- paste(obs.exp$title, ", SA: ", round(module.data$SA.score[match(obs.exp$title, paste("Module", 1:nModules))],2), sep="")
+  obs.exp$title <- paste(obs.exp$title, ", I: ", format(round(module.data$SA.score[match(obs.exp$title, paste("Module", 0:nModules))],2), nsmall = 2), sep="")
   obs.exp$title <- factor(obs.exp$title, levels = unique(obs.exp$title)[ranks])
   obs.exp$Var2 <- as.character(obs.exp$Var2)
   obs.exp$Var2 <- paste0(toupper(substr(obs.exp$Var2, 1, 1)), substr(obs.exp$Var2, 2, nchar(obs.exp$Var2)))
@@ -537,7 +521,7 @@ tissue.enrichment.plot <- function(module.data, module.column){
                                                   "TAG", "Saliv. gland", "Fatbody", "Carcass",  "Testis", "Acc. gland", "Ovary", "Virgin ST", "Mated ST",
                                                   "Heart", "Trachea"))
   names(obs.exp) <- c("Module", "Tissue", "Fold_enrichment", "Panel")
-
+  
   obs.exp$SA <- rep(module.data$SA.score, length(unique(obs.exp$Tissue)))
   
   ten.and.one <- levels(obs.exp$Panel) %in% c("Module 10, SA: 0", "Module 1, SA: 0") # R doesn't sort 10 and 1 very well, so manually correct it if needed
@@ -547,13 +531,14 @@ tissue.enrichment.plot <- function(module.data, module.column){
     new.levels[ten.and.one] <- c("Module 1, SA: 0", "Module 10, SA: 0")
     obs.exp$Panel <- factor(obs.exp$Panel, levels = new.levels)
   }
-
+  
   p1 <- ggplot(obs.exp, aes(x = Module, y= Fold_enrichment, fill=Tissue)) + geom_hline(aes(yintercept= 0))  + geom_hline(aes(yintercept= -0.5),linetype=2, colour = "grey") + geom_hline(aes(yintercept=2),linetype=2, colour = "grey") + geom_bar(stat="identity",position = "dodge") + facet_wrap(~Panel, scales="free_x", ncol=4) + xlab(NULL) +ylab("Tissue enrichment") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), strip.background = element_rect(colour=NULL, fill = NULL), panel.border = element_rect(fill=NA, colour="black",size=1), legend.key = element_blank(), legend.title = element_blank())
   
+  min.SA.across.all.networks <- min(c(module.data.consensus$SA.score, module.data.female$SA.score, module.data.male$SA.score))
   max.SA.across.all.networks <- max(c(module.data.consensus$SA.score, module.data.female$SA.score, module.data.male$SA.score))
   # Following code borrowed from Stack Overflow here: http://stackoverflow.com/questions/19440069/ggplot2-facet-wrap-strip-color-based-on-variable-in-data-set/21589891
   dummy <- ggplot(data = obs.exp, aes(x = Module, y = Fold_enrichment))+ facet_wrap(~Panel,ncol=4) + 
-    geom_rect(aes(fill=SA), xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=Inf, colour = "black",size=1) + scale_fill_gradient(low = "white", high = "#F48B94", limits = c(0, max.SA.across.all.networks)) +
+    geom_rect(aes(fill=SA), xmin=-Inf, xmax=Inf, ymin=-Inf, ymax=Inf, colour = "black",size=1) + scale_fill_gradient2(high = "#C7A9FD", mid = "white", low = "#F48B94", limits = c(min.SA.across.all.networks, max.SA.across.all.networks)) +
     theme_minimal()
   
   g1 <- ggplotGrob(p1)
@@ -582,95 +567,103 @@ tissue.enrichment.plot <- function(module.data, module.column){
     g1$layout <- rbind(g1$layout, g2$layout)
     g1
   }
-  ## ideally you'd remove the old strips, for now they're just covered
   new_plot <- gtable_stack(g1, new_strips)
   grid.newpage()
   grid.draw(new_plot)
 }
 
 
+
 # Function to make the connectivity plot
-gene.connectivity.plot <- function(){
-  plot.dat <- with(gene.data, data.frame(network = rep(c("Consensus network", "Female network", "Male network"), each = nrow(gene.data)), 
-                                         k =  c(gene.data$both.kTotal / max(gene.data$both.kTotal), gene.data$female.kTotal / max(gene.data$female.kTotal), gene.data$male.kTotal / max(gene.data$male.kTotal)), 
-                                         sex.bias = rep(sex.bias,3),
-                                         SA.score = rep(SA.score,3)
-  ))
-  plot.dat$bias <- "Unbiased"
-  plot.dat$bias[plot.dat$sex.bias > 1] <- "Female" # sex-biased genes are those with at least 2-fold difference in expression
-  plot.dat$bias[plot.dat$sex.bias < -1] <- "Male"
-  plot.dat$bias <- factor(plot.dat$bias, levels = c("Female", "Unbiased", "Male"))
-  plot.dat$SA <- "Non-SA"
-  plot.dat$SA[plot.dat$SA.score > 0.05] <- "SA"  # SA genes are those with a score of at least 0.05
-  dat <- melt(tapply(plot.dat$k, list(plot.dat$network, plot.dat$bias, plot.dat$SA), mean))
-  dat$lower <- melt(tapply(plot.dat$k, list(plot.dat$bias, plot.dat$SA), function(x) quantile(x, prob = 0.025)))[,3]
-  dat$higher <- melt(tapply(plot.dat$k, list(plot.dat$bias, plot.dat$SA), function(x) quantile(x, prob = 0.975)))[,3]
-  names(dat)[1:4] <- c("network", "bias", "SA", "k")
-  
-  ggplot(dat, aes(x = bias, y = k, group=SA)) + geom_errorbar(position=position_dodge(0.5), aes(ymin=lower, ymax=higher), width = 0)  + geom_point(position=position_dodge(0.5), size=4, aes(fill = SA), shape=21)  + theme_bw() + facet_wrap(~network)+ theme(legend.title = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), strip.background = element_rect(fill="white", color="black",size=1), legend.key = element_blank()) + scale_fill_manual(values=c("white", "black")) + ylab("Relative connectivity \n\u00B1 95% quantiles") + xlab("Sex bias in expression") + scale_y_continuous(limits=c(0,1))
-  
-}
+# gene.connectivity.plot <- function(){
+#   plot.dat <- with(gene.data, data.frame(network = rep(c("Consensus network", "Female network", "Male network"), each = nrow(gene.data)), 
+#                                          k =  c(both.kTotal / max(both.kTotal), 
+#                                                 female.kTotal / max(female.kTotal), 
+#                                                 male.kTotal / max(male.kTotal)), 
+#                                          sex.bias = rep(sex.bias,3),
+#                                          SA.score = rep(SA.score,3)
+#   ))
+#   plot.dat$bias <- "Unbiased"
+#   plot.dat$bias[plot.dat$sex.bias > 1] <- "Female" # sex-biased genes are those with at least 2-fold difference in expression
+#   plot.dat$bias[plot.dat$sex.bias < -1] <- "Male"
+#   plot.dat$bias <- factor(plot.dat$bias, levels = c("Female", "Unbiased", "Male"))
+#   plot.dat$SA <- "Unselected"
+#   plot.dat$SA[plot.dat$SA.score <= -0.05] <- "SA"  # SA genes are those with a score of at least -0.05
+#   plot.dat$SA[plot.dat$SA.score >= 0.05] <- "Concordant"  
+#   plot.dat$SA <- factor(plot.dat$SA, levels = c("SA", "Unselected", "Concordant"))
+#   #dat <- melt(tapply(plot.dat$k, list(plot.dat$network, plot.dat$bias, plot.dat$SA), median))
+#   print(melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), max)))
+#   dat <- melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), median)) %>%
+#     mutate(lower = melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), function(x) quantile(x, prob = 0.025)))[,4]) %>% mutate(higher = melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), function(x) quantile(x, prob = 0.975)))[,4])
+# 
+#   names(dat)[1:4] <- c("SA", "bias", "network", "k")
+#   
+#   ggplot(dat, aes(x = bias, y = k, group=SA)) + geom_errorbar(position=position_dodge(0.5), aes(ymin=lower, ymax=higher), width = 0)  + geom_point(position=position_dodge(0.5), size=4, aes(fill = SA), shape=21)  + theme_bw() + facet_wrap(~network)+ theme(legend.title = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), strip.background = element_rect(fill="white", color="black",size=1), legend.key = element_blank()) + ylab("Relative connectivity \n\u00B1 95% quantiles") + xlab("Sex bias in expression") + scale_y_continuous(limits=c(0,1)) + scale_fill_manual(values=c("purple", "white", "yellow")) 
+# }
 
 
 # Function by Hadley Wickham that makes multiple ggplots that share a legend (used for the connectedness plot). Source: https://github.com/hadley/ggplot2/wiki/Share-a-legend-between-two-ggplot2-graphs
-grid_arrange_shared_legend <- function(..., ncol = length(list(...)), nrow = 1, position = c("bottom", "right")) {
-  
-  plots <- list(...)
-  position <- match.arg(position)
-  g <- ggplotGrob(plots[[1]] + theme(legend.position = position))$grobs
-  legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
-  lheight <- sum(legend$height)
-  lwidth <- sum(legend$width)
-  gl <- lapply(plots, function(x) x + theme(legend.position="none"))
-  gl <- c(gl, ncol = ncol, nrow = nrow)
-  
-  combined <- switch(position,
-                     "bottom" = arrangeGrob(do.call(arrangeGrob, gl),
-                                            legend,
-                                            ncol = 1,
-                                            heights = unit.c(unit(1, "npc") - lheight, lheight)),
-                     "right" = arrangeGrob(do.call(arrangeGrob, gl),
-                                           legend,
-                                           ncol = 2,
-                                           widths = unit.c(unit(1, "npc") - lwidth, lwidth)))
-  grid.newpage()
-  grid.draw(combined)
-}
+# grid_arrange_shared_legend <- function(..., ncol = length(list(...)), nrow = 1, position = c("bottom", "right")) {
+#   
+#   plots <- list(...)
+#   position <- match.arg(position)
+#   g <- ggplotGrob(plots[[1]] + theme(legend.position = position))$grobs
+#   legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+#   lheight <- sum(legend$height)
+#   lwidth <- sum(legend$width)
+#   gl <- lapply(plots, function(x) x + theme(legend.position="none"))
+#   gl <- c(gl, ncol = ncol, nrow = nrow)
+#   
+#   combined <- switch(position,
+#                      "bottom" = arrangeGrob(do.call(arrangeGrob, gl),
+#                                             legend,
+#                                             ncol = 1,
+#                                             heights = unit.c(unit(1, "npc") - lheight, lheight)),
+#                      "right" = arrangeGrob(do.call(arrangeGrob, gl),
+#                                            legend,
+#                                            ncol = 2,
+#                                            widths = unit.c(unit(1, "npc") - lwidth, lwidth)))
+#   grid.newpage()
+#   grid.draw(combined)
+# }
 
 
-# Function to make plot showing that male-benefitting and female-benefitting transcripts are clustered, and these modules tend to be SA (Figure 2)
+# Function to make plot showing that male-benefitting and female-benefitting transcripts are clustered, and these modules tend to be SA (Figure 3)
 modularity.of.SA.plot <- function(){
   
   individual.pair.of.plots <- function(gene.data, module.data, mod.var, title, xlab = c(" ", " "), ylab = c(" ", " ")){
-    chi.sq.table <- table(gene.data$gene.gender, mod.var)
-    chi.sq.table<- chi.sq.table[rownames(chi.sq.table) != " ", colnames(chi.sq.table) != "0"]
-    print(chisq.test(chi.sq.table))
+    gene.data <- gene.data[mod.var != 0, ] # Omit module zero
+    mod.var <- droplevels(mod.var[mod.var != 0]) # Omit module zero
+    module.data <- module.data[module.data$Module != "ME0", ] # Omit module zero
     dat <- melt(table(gene.data$gene.gender, mod.var))
-    dat[,2] <- factor(dat[,2], levels = levels(mod.var)[levels(mod.var) != "0"])
+    print(table(gene.data$gene.gender, mod.var)[2:3, ])
+    print(chisq.test(table(gene.data$gene.gender, mod.var)[2:3, ]))
+    dat[,2] <- factor(dat[,2], levels = levels(mod.var))
     dat <- dat[!is.na(dat[,2]), ]
     dat$value <- dat$value / rep(as.numeric(tapply(dat$value, dat$mod.var, sum)), each=3)
-    
+    dat <- dat[rev(order(dat$Var1)), ]
     dat2 <- data.frame(skew = tapply(dat$value, dat$mod.var, function(x) 2*(-0.5 + x[x == max(x[1:2])][1] / sum(x[1:2]))), 
-                       SA.score = rev(sort(module.data$SA.score)))
+                       SA.score = sort(module.data$SA.score))
+    pink.col <- rgb(233, 197, 203, maxColorValue = 255) # rgb(237, 186, 198, maxColorValue = 255)
+    blue.col <-  rgb(201, 237, 254, maxColorValue = 255)
+    p1 <- ggplot(dat, aes(x = mod.var, y = 100*value, fill = Var1)) + geom_bar(stat="identity", colour = "black") + scale_fill_manual(values = c("white", pink.col,  blue.col)) + theme_bw() + scale_x_discrete(expand =c(0,0)) + scale_y_continuous(expand =c(0,0)) + xlab(NULL) + ylab(NULL) + theme(legend.position = "none", panel.border = element_blank())
     
-    p1 <- ggplot(dat, aes(x = mod.var, y = 100*value, fill = Var1)) + geom_bar(stat="identity", colour = "black") + scale_fill_manual(values = c(rgb(237, 186, 198, maxColorValue = 255), rgb(201, 237, 254, maxColorValue = 255), "white")) + theme_bw() + scale_x_discrete(expand =c(0,0))+ scale_y_continuous(expand =c(0,0)) + xlab(NULL) + ylab(NULL) + theme(legend.position = "none", panel.border = element_blank())
-    
-    p2 <- ggplot(dat2, aes(x = skew, y = SA.score)) + stat_smooth(method="lm", colour = "black") + geom_point(alpha=0.8)  +coord_cartesian(xlim =c(0, 1), ylim = c(0, 0.17)) + theme_bw() +theme(legend.position = "none", panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1)) + xlab(NULL) + ylab(NULL) 
+    p2 <- ggplot(dat2, aes(x = skew, y = SA.score)) + stat_smooth(method="lm", colour = "black") + geom_hline(yintercept = 0, linetype = 2, colour = "grey") + geom_point(alpha=0.8)  +coord_cartesian(xlim =c(0, 1), ylim = c(-.18, .12)) + theme_bw() +theme(legend.position = "none", panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1)) + xlab(NULL) + ylab(NULL) 
     return(list(p1,p2))
-  }
+  } # end
   
-  p1 <- individual.pair.of.plots(gene.data[gene.data$consensus.module!=0,], module.data.consensus[module.data.consensus$Module != "ME0", ], gene.data$modules.in.order.of.SA.con[gene.data$consensus.module!=0], "Consensus network")
-  p2 <- individual.pair.of.plots(gene.data[gene.data$female.module!=0,], module.data.female[module.data.female$Module != "ME0", ], gene.data$modules.in.order.of.SA.fem[gene.data$female.module!=0], "Female network", ylab = c("% genes","Sexual antagonism score"))
-  p3 <- individual.pair.of.plots(gene.data[gene.data$male.module!=0,], module.data.male[module.data.male$Module != "ME0", ], gene.data$modules.in.order.of.SA.male[gene.data$male.module!=0], "Male network", xlab = c("Module", "Skew towards one sex"))
+  p1 <- individual.pair.of.plots(gene.data, module.data.consensus, gene.data$modules.in.order.of.SA.con, "Consensus network")
+  p2 <- individual.pair.of.plots(gene.data, module.data.female, gene.data$modules.in.order.of.SA.fem, "Female network", ylab = c("% genes","Sexual antagonism score"))
+  p3 <- individual.pair.of.plots(gene.data, module.data.male, gene.data$modules.in.order.of.SA.male, "Male network", xlab = c("Module", "Skew towards one sex"))
   
   return(grid.arrange(
     arrangeGrob(arrangeGrob(p1[[1]],p2[[1]],p3[[1]],ncol=1), bottom = "Module (from most to least sexually antagonistic)", left = "% genes benefitting males or females"), 
-    arrangeGrob(arrangeGrob(p1[[2]],p2[[2]],p3[[2]],ncol=1), bottom = "Skew towards one sex", left="Sexual antagonism score for the module"), 
+    arrangeGrob(arrangeGrob(p1[[2]],p2[[2]],p3[[2]],ncol=1), bottom = "Skew of SA genes towards one sex", left="Sex-specific selection index (I)"), 
     ncol=2, widths=c(1, 0.5)
   ))
 }
 
-# Function to make a neat LaTex table out of the GO enrichment results
+# Function to make a neat LaTex table of the GO enrichment results
 make.latex.table <- function(GO.data, suffix, nTerms){
   GO.data <- lapply(GO.data, function(x) {
     max <- nrow(x)
@@ -779,7 +772,7 @@ distance.simulation <- function(module.type, boots=1000){
 
 
 # Very similar simulation function that does a distance simulation on the SA and non-SA genes. By default, genes in the top 1% by SA.score are considered SA.
-distance.simulation.SAgenes <- function(percentile = 0.99, boots=1000){
+distance.simulation.SAgenes <- function(percentile = 0.01, boots=1000){
   chrs <- c("2L", "2R", "3L", "3R", "X")
   
   gene.data$map.position <- abs(gene.data$map.position) # Get rid of the minus signs. This is because genes with positions e.g. -31850551 and 31819663 are right next to each other, just on opposite DNA strands (antisense and sense)
@@ -787,7 +780,7 @@ distance.simulation.SAgenes <- function(percentile = 0.99, boots=1000){
   # restrict to proper chromosomes
   gene.data <- gene.data[gene.data$chromosome %in% chrs, ]
   gene.data$SA <- 0 # define which genes are SA
-  gene.data$SA[gene.data$SA.score >= quantile(gene.data$SA.score, probs = percentile)] <- 1
+  gene.data$SA[gene.data$SA.score <= quantile(gene.data$SA.score, probs = percentile)] <- 1
   
   chr.lengths <- as.numeric(with(gene.data, tapply(map.position, chromosome, function(x) max(x) - min(x)))) # distance between furthest genes on each chromosome
   
@@ -836,7 +829,8 @@ distance.simulation.SAgenes <- function(percentile = 0.99, boots=1000){
 # Run GO term enrichment test. The gene universe is all probes that have Entrez IDs, and which have GO terms associated with them
 # The test set of probes is either manually entered, or is equal to the set of probes with a given SA.score
 # The arg restrict.to.sig.SA can be used to restrict the test to just genes that were found to be significantly SA by Innocenti and Morrow
-GO.enrichment.test <- function(SA.cutoff=NULL, manual.gene.set = NULL, restrict.to.sig.SA = F){
+# The arg SA.or.concordant tells the function to look below or above the SA.cutoff
+GO.enrichment.test <- function(SA.cutoff=NULL, SA.or.concordant=NULL, manual.gene.set = NULL, restrict.to.sig.SA = F){
   
   # Let's define the gene universe as all probes that have Entrez IDs, and have GO terms associated with them
   have.no.GO <- sapply(as.list(drosophila2GO), function(x) is.na(x)[1])
@@ -844,8 +838,10 @@ GO.enrichment.test <- function(SA.cutoff=NULL, manual.gene.set = NULL, restrict.
   universe <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO)] 
   
   # Let's define the focal gene set. Again, this exclude genes without EntrezIDs, or which have no GO terms
-  if(is.null(manual.gene.set) & !restrict.to.sig.SA) gene.set <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO) & gene.data$SA.score >= SA.cutoff] 
-  else if(is.null(manual.gene.set) & restrict.to.sig.SA) gene.set <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO) & gene.data$SA.score >= SA.cutoff & gene.data$sexually.antagonistic==1]  
+  if(is.null(manual.gene.set) & !restrict.to.sig.SA & SA.or.concordant == "SA") gene.set <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO) & gene.data$SA.score <= SA.cutoff] 
+  else if(is.null(manual.gene.set) & restrict.to.sig.SA & SA.or.concordant == "SA") gene.set <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO) & gene.data$SA.score <= SA.cutoff & gene.data$sexually.antagonistic==1]  
+  if(is.null(manual.gene.set) & !restrict.to.sig.SA & SA.or.concordant == "concordant") gene.set <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO) & gene.data$SA.score >= SA.cutoff] 
+  else if(is.null(manual.gene.set) & restrict.to.sig.SA & SA.or.concordant == "concordant") gene.set <- gene.data$EntrezID[!is.na(gene.data$EntrezID) & !(gene.data$affy.name %in% have.no.GO) & gene.data$SA.score >= SA.cutoff & gene.data$sexually.antagonistic==1]  
   else if(!is.null(manual.gene.set) & !restrict.to.sig.SA) gene.set <- gene.data$EntrezID[gene.data$affy.name %in% manual.gene.set]  
   else if(!is.null(manual.gene.set) & restrict.to.sig.SA) gene.set <- gene.data$EntrezID[gene.data$affy.name %in% manual.gene.set & gene.data$sexually.antagonistic==1]  
   
@@ -859,6 +855,7 @@ GO.enrichment.test <- function(SA.cutoff=NULL, manual.gene.set = NULL, restrict.
                 testDirection = "over")
   summary(hyperGTest(params))
 }
+
 
 
 

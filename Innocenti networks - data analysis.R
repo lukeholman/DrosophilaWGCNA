@@ -88,6 +88,13 @@ module.cluster.plot(both.net)
 module.cluster.plot(female.net)
 module.cluster.plot(male.net)
 
+# This is not in the paper, but here is a histogram showing that the list of antagonistic genes identified by I+M are often not antagonistic, if one uses the 'I' measure of antagonism, and conducts the selection analysis on hemiclones means as I did:
+# Remember, positive scores suggest sexually concordant selection, and scores closes to zero suggest sex-limited selection.
+hist(gene.data$SA.score[gene.data$sexually.antagonistic == 1], xlab = "Index of sex-specific selection (I)") 
+sum(gene.data$SA.score[gene.data$sexually.antagonistic == 1] > -0.05) / length(gene.data$SA.score[gene.data$sexually.antagonistic == 1])
+sum(gene.data$SA.score[gene.data$sexually.antagonistic == 1] > 0) / length(gene.data$SA.score[gene.data$sexually.antagonistic == 1])
+sum(gene.data$SA.score[gene.data$sexually.antagonistic == 1] > 0.05) / length(gene.data$SA.score[gene.data$sexually.antagonistic == 1])
+
 
 #############################################################
 # TABLE 1, PLUS ALL THE STATS GIVEN "LOOSE" IN THE TEXT
@@ -125,10 +132,18 @@ rm(list=c("chi", "df", "test.data", "observed", "expected"))
 
 
 # Table 1: The top 1% most SA genes are enriched for GO terms relating to alternative splicing
-go.output <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.99))
-print(xtable(go.output[-(1:2)][,c(5,1:4)]), include.rownames=F) # print table in LaTex format
+go.output.SA <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.01), SA.or.concordant = "SA")
+print(xtable(go.output.SA[-(1:2)][,c(5,1:4)]), include.rownames=F) # print table in LaTex format
+
+# Similar table not in the text: The top 1% most sexually concordant genes are enriched for GO terms relating to programmed cell death
+go.output.concordant <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.99), SA.or.concordant = "concordant")
+print(xtable(go.output.concordant[-(1:2)][,c(5,1:4)]), include.rownames=F) # print table in LaTex format
+
 
 # Plot showing that genes in the top 1% most SA list are under-represented in the fly atlas list of testes genes (discussed but not shown in paper, since it just replicates conclusions already made by I+M)
+gene.tissue.plot(gene.data$affy.name[gene.data$SA.score <= quantile(gene.data$SA.score, probs = 0.01)])
+
+# Plot showing that genes in the top 1% most concordant list are under-represented in the fly atlas list of spermatheca genes (discussed but not shown in paper, since it just replicates conclusions already made by I+M)
 gene.tissue.plot(gene.data$affy.name[gene.data$SA.score >= quantile(gene.data$SA.score, probs = 0.99)])
 
 # Have a look at the data for some famous genes involved in the sex determination cascade - some are sexually antagonistic, some are not.
@@ -136,7 +151,7 @@ gene.tissue.plot(gene.data$affy.name[gene.data$SA.score >= quantile(gene.data$SA
 gene.data[gene.data$name %in% c("Sex lethal", "doublesex", "transformer", "transformer 2", "sans fille", "CG6824 gene product from transcript CG6824-RE", "ovarian tumor", "virilizer", "female lethal d", "fused"), c(1,9,15,16:18)]
 
 # SA genes are not clustered on particular chromosomes
-observed <- t(rbind(table(gene.data$chromosome[gene.data$chromosome %in% c("2L", "2R", "3L", "3R",  "X") & gene.data$SA.score < quantile(gene.data$SA.score, probs = 0.99)]), table(gene.data$chromosome[gene.data$SA.score >= quantile(gene.data$SA.score, probs = 0.99)])))
+observed <- t(rbind(table(gene.data$chromosome[gene.data$chromosome %in% c("2L", "2R", "3L", "3R",  "X") & gene.data$SA.score <= quantile(gene.data$SA.score, probs = 0.01)]), table(gene.data$chromosome[gene.data$chromosome %in% c("2L", "2R", "3L", "3R",  "X") & gene.data$SA.score > quantile(gene.data$SA.score, probs = 0.01)])))
 expected <- do.call("cbind", lapply(colSums(observed), function(x) x * genes.per.chromosome))
 chi <- sum((observed - expected)^2 / expected)
 df <- (ncol(expected)-1)*(nrow(expected)-1)
@@ -171,8 +186,8 @@ dev.off()
 
 
 # FIGURE 4: sexually antagonistic modules tend to be more heritable
-pdf("../figures/SA.modules.are.heritable.pdf", width = 8.5, height = 3.7)
-ggplot(plot.data, aes(x = SA.score, y = Herit.to.plot)) + stat_smooth(method="lm", colour = "black") + geom_point(aes(size = module.size, fill = mean.sex.bias),shape=21)  + xlab("Sexual antagonism score") +  ylab("Heritability") +theme_bw() + theme(legend.position="none",panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), axis.title = element_text(size=12), strip.text = element_text(size=12),strip.background = element_rect(fill="white", color="black",size=1))+ scale_fill_gradient2(low="blue", mid="white", high="red") + facet_wrap(~network) + coord_cartesian(ylim = c(0, 1.02))
+pdf("../figures/herit.pdf", width = 8.5, height = 3.7)
+ggplot(plot.data, aes(x = SA.score, y = Herit.to.plot)) + stat_smooth(method="lm", colour = "black") + geom_vline(xintercept = 0, linetype = 2, colour = "grey") + geom_point(aes(size = module.size, fill = mean.sex.bias),shape=21)  + xlab("Sex-specific selection index (I)") + ylab("Heritability") +theme_bw() + theme(legend.position="none",panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), axis.title = element_text(size=12), strip.text = element_text(size=12),strip.background = element_rect(fill="white", color="black",size=1))+ scale_fill_gradient2(low="blue", mid="white", high="red") + facet_wrap(~network) + coord_cartesian(ylim = c(0, 1.02))
 dev.off()
 
 # Stats for Figure 4:
@@ -188,23 +203,44 @@ summary(lm(Herit.to.plot ~ mean.sex.bias + module.size, data = plot.data[plot.da
 
 # FIGURE 5: Modules with sex-specific genetic architecture tend to be less SA
 pdf("../figures/inter.sex.corr.pdf", width = 3.7, height = 3.85)
-ggplot(plot.data[plot.data$network=="Consensus network", ], aes(x = gen.corr, y = SA.score)) +geom_vline(xintercept = 0,linetype=2,colour="grey")+ stat_smooth(method="lm", colour = "black") + geom_point(aes(size = module.size, fill = mean.sex.bias),shape=21)+  ylab("Sexual antagonism score") +theme_bw() + theme(legend.position="none",panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), axis.title = element_text(size=12), strip.text = element_text(size=12),strip.background = element_rect(fill="white", color="black",size=1))+ scale_fill_gradient2(low="blue", mid="white", high="red") + coord_cartesian(ylim = c(0,0.104))   + xlab("Inter-sex genetic correlation\nfor module expression")+ scale_y_continuous(breaks = c(0,0.05,0.1)) + scale_x_continuous(breaks=c(-0.4,0,0.4,0.8))
+ggplot(plot.data[plot.data$network=="Consensus network", ], aes(x = gen.corr, y = SA.score)) +geom_hline(yintercept = 0,linetype=2,colour="grey") +geom_vline(xintercept = 0,linetype=2,colour="grey")+ stat_smooth(method="lm", colour = "black") + geom_point(aes(size = module.size, fill = mean.sex.bias),shape=21)+  ylab("Sex-specific selection index (I)") +theme_bw() + theme(legend.position="none",panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), axis.title = element_text(size=12), strip.text = element_text(size=12),strip.background = element_rect(fill="white", color="black",size=1))+ scale_fill_gradient2(low="blue", mid="white", high="red")  + xlab("Inter-sex genetic correlation\nfor module expression")+ scale_y_continuous(breaks = c(-0.1,-0.05,0,0.05,0.1)) + scale_x_continuous(breaks=c(-0.4,0,0.4,0.8))
 dev.off()
 
-# stats for Figure 5
+# stats associated with Figure 5
 summary(lm(SA.score ~ gen.corr, data = plot.data[plot.data$network=="Consensus network", ])) 
+summary(lm(gen.corr ~  mean.sex.bias, data = plot.data[plot.data$network=="Consensus network", ])) 
+summary(lm(SA.score ~  mean.sex.bias, data = plot.data[plot.data$network=="Consensus network", ])) 
 
 
+# Figure 6 - export at 28 x 6.75 then finish in Inkscape
+# Histogram of I values and associated GO enrichment tables
+t1 <- tableGrob(go.output.SA[-(1:2)][,c(5,1:4)] %>% mutate(OddsRatio = round(OddsRatio,2), ExpCount = round(ExpCount, 2)), rows = NULL, base_size = 1)
+t2 <- tableGrob(go.output.concordant[-(1:2)][,c(5,1:4)] %>% mutate(OddsRatio = round(OddsRatio,2), ExpCount = round(ExpCount, 2)), rows = NULL, base_size = 1)
+p <- ggplot(gene.data, aes(x=SA.score)) +   geom_histogram(aes(y = ..count..), bins = 8, breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2), fill = c(cols[1], cols), colour = "black")+
+  annotate("text", x = -0.175, y = 119, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I< -0.15]), "%", sep="")) + 
+  annotate("text", x = -0.125, y = 525, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.15 & cum.sum$I< -0.1]), "%", sep="")) + 
+  annotate("text", x = -0.075, y = 2210, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.1 & cum.sum$I< -0.05]), "%", sep="")) + 
+  annotate("text", x = -0.025, y = 4499, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.05 & cum.sum$I< 0]), "%", sep="")) + 
+  annotate("text", x = 0.025, y = 4160, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0 & cum.sum$I< 0.05]), "%", sep="")) + 
+  annotate("text", x = 0.075, y = 1470, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.05 & cum.sum$I< 0.1]), "%", sep="")) + 
+  annotate("text", x = 0.125, y = 230, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.1 & cum.sum$I< 0.15]), "%", sep="")) + 
+  annotate("text", x = 0.175, y = 83, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.15]), "%", sep="")) + 
+  theme_bw(15) + theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(), panel.border = element_rect(colour="black", fill = NA, size=1)) + 
+  xlab("Index of sex-specific selection (I)") + ylab("Number of transcripts") + scale_y_continuous(expand = c(0,0), limits = c(0,4600)) + scale_x_continuous(breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2)) 
+grid.newpage() 
+grid.draw(arrangeGrob(t1,p,t2,ncol=3, as.table=T))
+rm(list = c("t1", "t2", "p"))
 
-# FIGURE 6: Connectivity of SA and non-SA genes, split by gene type (male-biased, female-biased, or unbiased)
-pdf("../figures/connectivity.plot.pdf", width = 9.3, height = 3.7)
-gene.connectivity.plot()
-dev.off()
 
+# Removed from current draft of paper
+# # FIGURE 6: Connectivity of SA and non-SA genes, split by gene type (male-biased, female-biased, or unbiased)
+# pdf("../figures/connectivity.plot.pdf", width = 9.3, height = 3.7)
+# gene.connectivity.plot()
+# dev.off()
 # Stats associated with Figure 6 (note that this treats the extent of sex bias, and the extent of SA, as continuous variables - they are binned into discrete categories in the figure for ease of presentation)
-xtable(Anova(lm(gene.data$both.kTotal / max(gene.data$both.kTotal) ~ SA.score * sex.bias, data = gene.data), type = "III"))
-xtable(Anova(lm(gene.data$female.kTotal / max(gene.data$female.kTotal)~ SA.score * sex.bias, data = gene.data), type = "III"))
-xtable(Anova(lm(gene.data$male.kTotal / max(gene.data$male.kTotal) ~ SA.score * sex.bias, data = gene.data), type = "III"))
+# xtable(Anova(lm(gene.data$both.kTotal / max(gene.data$both.kTotal) ~ SA.score * sex.bias, data = gene.data), type = "III"))
+# xtable(Anova(lm(gene.data$female.kTotal / max(gene.data$female.kTotal)~ SA.score * sex.bias, data = gene.data), type = "III"))
+# xtable(Anova(lm(gene.data$male.kTotal / max(gene.data$male.kTotal) ~ SA.score * sex.bias, data = gene.data), type = "III"))
 
 
 ################################################
@@ -217,11 +253,18 @@ make.latex.table(GO.terms.per.module.female, "f", 10)
 make.latex.table(GO.terms.per.module.male, "m", 10)
 
 # Supplementary table listing the top 1% most SA genes
-supp.table <- gene.data %>% arrange(-SA.score)
-supp.table <- supp.table[supp.table$SA.score >= quantile(supp.table$SA.score, probs = 0.99), c(1,9,7,16,18)] 
+supp.table <- gene.data %>% arrange(SA.score)
+supp.table <- supp.table[supp.table$SA.score <= quantile(supp.table$SA.score, probs = 0.01), c(1,9,7,16,18)] 
 names(supp.table) <- c("Probe", "Gene name", "Entrez ID", "Benefiting sex", "Sex bias")
 supp.table[,5] <- round(supp.table[,5], 2)
 supp.table[grep("Glycosylphosphatidylinositol anchor attachment", supp.table[,2]),2] <- "Glycosylphosphatidylinositol anchor attachment 1 ortholog" # shorten this one's name
+print(xtable(supp.table), include.rownames=F, tabular.environment = "longtable", floating = F)
+
+# Supplementary table listing the top 1% most concordant genes
+supp.table <- gene.data %>% arrange(-SA.score)
+supp.table <- supp.table[supp.table$SA.score >= quantile(supp.table$SA.score, probs = 0.99), c(1,9,7,18)]
+names(supp.table) <- c("Probe", "Gene name", "Entrez ID", "Benefiting sex", "Sex bias")
+supp.table[,5] <- round(supp.table[,5], 2)
 print(xtable(supp.table), include.rownames=F, tabular.environment = "longtable", floating = F)
 
 # For fun, have a look at all the GO terms associated with the top 1% most SA genes 
@@ -232,6 +275,25 @@ get.GO.for.SA.genes(supp.table)
 ################################################
 # SUPPLEMENTARY FIGURES
 ################################################
+
+# Here is a histogram of I values for all the genes, as calculated by me using hemiclone means selection analysis
+cols <- brewer.pal(7, "RdBu")
+pdf("../figures/SA.genes.histogram.pdf", width = 7.5, height = 6.75)
+ggplot(gene.data, aes(x=SA.score)) +   geom_histogram(aes(y = ..count..), bins = 8, breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2), fill = c(cols[1], cols), colour = "black")+
+  annotate("text", x = -0.175, y = 119, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I< -0.15]), "%", sep="")) + 
+  annotate("text", x = -0.125, y = 525, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.15 & cum.sum$I< -0.1]), "%", sep="")) + 
+  annotate("text", x = -0.075, y = 2210, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.1 & cum.sum$I< -0.05]), "%", sep="")) + 
+  annotate("text", x = -0.025, y = 4499, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.05 & cum.sum$I< 0]), "%", sep="")) + 
+  annotate("text", x = 0.025, y = 4160, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0 & cum.sum$I< 0.05]), "%", sep="")) + 
+  annotate("text", x = 0.075, y = 1470, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.05 & cum.sum$I< 0.1]), "%", sep="")) + 
+  annotate("text", x = 0.125, y = 230, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.1 & cum.sum$I< 0.15]), "%", sep="")) + 
+  annotate("text", x = 0.175, y = 83, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.15]), "%", sep="")) + 
+  theme_bw(15) + theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(), panel.border = element_rect(colour="black", fill = NA, size=1)) + 
+  xlab("Index of sex-specific selection (I)") + ylab("Number of transcripts") + scale_y_continuous(expand = c(0,0), limits = c(0,4600)) + scale_x_continuous(breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2))
+dev.off()
+
+
+
 
 # FIGURES S1-S3: relative fitness against standardized mean eigengene for each module, for males and females, at the level of hemiclones
 fitness.vs.eigengenes.plot(MEconsensus.clone.data, module.data.consensus, consensus=T)
@@ -275,3 +337,27 @@ ggsave("../figures/distance plot - consensus.eps", boot.distance.plot(consensus.
 ggsave("../figures/distance plot - female.eps", boot.distance.plot(female.boots), width = 13.1, height = 9.51)
 ggsave("../figures/distance plot - male.eps", boot.distance.plot(male.boots), width = 13.1, height = 9.51)
 
+
+
+
+
+# Snipped text from the paper about connectivity of SA and non-SA genes - I thought this was confusing, and the predictions are not clearly defined enough.
+
+# %\vspace{4mm} 
+# %\subsection*{Calculating connectivity for each transcript}
+# %I calculated 'connectivity' for each transcript, separately for the consensus, male, and female networks. Connectivity is the sum of the absolute correlations in expression between the focal gene and all the other genes, after scaling the transcriptional network to have scale-independent topology. For the consensus network this was accomplished by making a $n\times n$ matrix of absolute correlation coefficients (where $n$ is the number of genes), raising each correlation to the power $p_{c}$ (where $p_{c}$ is the scaling power used when constructing the consensus network), and then summing the off-diagonal correlations in each column. The procedure was the same for the female and male networks, except that the adjacency matrix was constructed using only samples of the correct sex, and was scaled using the appropriate powers $p_{f}$ and $p_{m}$.
+
+# \subsection*{Connectivity of sexually antagonistic and non-antagonistic genes}
+# Next, I tested whether sexually antagonistic genes were more or less connected than non-antagonistic genes. Figure \ref{fig:connectedness_plot} shows connectivity (expressed as a proportion of the highest connectivity value in the network) for antagonistic and non-antagonistic genes, which have been further divided into genes with male-biased expression, female-biased expression, or no sex bias in expression.
+# 
+# For all three networks, sexual antagonism was significantly related to connectivity, though the strength of the relationship differed between between male-biased, female-biased or unbiased genes (Tables S4-S6). However, the amount of variation in connectivity explained by sexual antagonism was uniformly low (Tables S4-S6), as illustrated by the subtlety of the differences in Figure \ref{fig:connectedness_plot} and the large 95\% quantiles around the means. 
+# 
+# In the consensus network, antagonistic genes showing male- or female-biased expression were less connected. In the female network the negative effect of antagonism on connectivity was most apparent for female-biased genes, while in the male network the same was true of male-biased genes. 
+# 
+# \begin{figure*}[hb]
+# \begin{center}
+# \includegraphics[width=1.0\textwidth]{connectivity_plot.pdf}
+# \end{center}
+# \caption{The connectivity of a transcript depended on whether it was sexually antagonistic, whether it showed sex-biased expression, and the interaction between these two parameters. The genes have been binned into discrete categories for ease of interpretation: SA genes were arbitrarily defined as those with a sexual antagonism score $>0.05$, while sex-biased genes were defined as those with $>2$-fold differences in expression between sexes. The plots show the mean and 95\% quantiles of relative connectivity.}
+# \label{fig:connectedness_plot}
+# \end{figure*}

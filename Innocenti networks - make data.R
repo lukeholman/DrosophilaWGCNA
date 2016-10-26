@@ -43,7 +43,7 @@ options(stringsAsFactors = FALSE)
 # Now we load in the microarray data and normalise it. 
 # SKIP THIS STEP if you already run it once and made the file with the normalised expression data - it takes ages, and my function will write the normalised data to disk to save doing it again.
 source("Normalise_expression_data.R")
-make.normalised.expression.data(filepath = "~/Desktop/Innocenti microarray data", make.sample.cluster.plot = F, write.normalised.data.to.disk = T)
+make.normalised.expression.data(filepath = filepath, make.sample.cluster.plot = F, write.normalised.data.to.disk = T)
 
 # Load in the expression data, and the data describing each of the 120 samples (their sex, their hemiclone etc)
 sampleID <- set.up.data("sampleID") # Now load the identifying data about each sample: its sex, its hemiclone, and the fitness of males and females in the line from which it originates
