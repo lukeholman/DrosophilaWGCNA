@@ -97,7 +97,7 @@ sum(gene.data$SA.score[gene.data$sexually.antagonistic == 1] > 0.05) / length(ge
 
 
 #############################################################
-# TABLE 1, PLUS ALL THE STATS GIVEN "LOOSE" IN THE TEXT
+# ALL THE STATS GIVEN "LOOSE" IN THE TEXT
 #############################################################
 
 # Stats asking "Are genes from the same module randomly distributed across chromosomes?"
@@ -128,16 +128,6 @@ expected <- do.call("cbind", lapply(colSums(observed), function(x) x * genes.per
 chi <- sum((observed - expected)^2 / expected)
 paste("Chi = ", round(chi,2), ", df = ", df, ", p=", round(1-pchisq(chi,df),4), ".", sep="")
 rm(list=c("chi", "df", "test.data", "observed", "expected"))
-
-
-
-# Table 1: The top 1% most SA genes are enriched for GO terms relating to alternative splicing
-go.output.SA <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.01), SA.or.concordant = "SA")
-print(xtable(go.output.SA[-(1:2)][,c(5,1:4)]), include.rownames=F) # print table in LaTex format
-
-# Similar table not in the text: The top 1% most sexually concordant genes are enriched for GO terms relating to programmed cell death
-go.output.concordant <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.99), SA.or.concordant = "concordant")
-print(xtable(go.output.concordant[-(1:2)][,c(5,1:4)]), include.rownames=F) # print table in LaTex format
 
 
 # Plot showing that genes in the top 1% most SA list are under-represented in the fly atlas list of testes genes (discussed but not shown in paper, since it just replicates conclusions already made by I+M)
@@ -212,8 +202,14 @@ summary(lm(gen.corr ~  mean.sex.bias, data = plot.data[plot.data$network=="Conse
 summary(lm(SA.score ~  mean.sex.bias, data = plot.data[plot.data$network=="Consensus network", ])) 
 
 
-# Figure 6 - export at 28 x 6.75 then finish in Inkscape
+# FIGURE 6 - export at 28 x 6.75 then finish in Inkscape
 # Histogram of I values and associated GO enrichment tables
+
+# Table from Figure 6: The top 1% most SA genes are enriched for GO terms relating to alternative splicing
+go.output.SA <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.01), SA.or.concordant = "SA")
+# Other table from Figure 6: The top 1% most sexually concordant genes are enriched for GO terms relating to programmed cell death
+go.output.concordant <- GO.enrichment.test(SA.cutoff = quantile(gene.data$SA.score, probs = 0.99), SA.or.concordant = "concordant")
+
 t1 <- tableGrob(go.output.SA[-(1:2)][,c(5,1:4)] %>% mutate(OddsRatio = round(OddsRatio,2), ExpCount = round(ExpCount, 2)), rows = NULL, base_size = 1)
 t2 <- tableGrob(go.output.concordant[-(1:2)][,c(5,1:4)] %>% mutate(OddsRatio = round(OddsRatio,2), ExpCount = round(ExpCount, 2)), rows = NULL, base_size = 1)
 p <- ggplot(gene.data, aes(x=SA.score)) +   geom_histogram(aes(y = ..count..), bins = 8, breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2), fill = c(cols[1], cols), colour = "black")+
@@ -276,25 +272,6 @@ get.GO.for.SA.genes(supp.table)
 # SUPPLEMENTARY FIGURES
 ################################################
 
-# Here is a histogram of I values for all the genes, as calculated by me using hemiclone means selection analysis
-cols <- brewer.pal(7, "RdBu")
-pdf("../figures/SA.genes.histogram.pdf", width = 7.5, height = 6.75)
-ggplot(gene.data, aes(x=SA.score)) +   geom_histogram(aes(y = ..count..), bins = 8, breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2), fill = c(cols[1], cols), colour = "black")+
-  annotate("text", x = -0.175, y = 119, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I< -0.15]), "%", sep="")) + 
-  annotate("text", x = -0.125, y = 525, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.15 & cum.sum$I< -0.1]), "%", sep="")) + 
-  annotate("text", x = -0.075, y = 2210, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.1 & cum.sum$I< -0.05]), "%", sep="")) + 
-  annotate("text", x = -0.025, y = 4499, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> -0.05 & cum.sum$I< 0]), "%", sep="")) + 
-  annotate("text", x = 0.025, y = 4160, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0 & cum.sum$I< 0.05]), "%", sep="")) + 
-  annotate("text", x = 0.075, y = 1470, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.05 & cum.sum$I< 0.1]), "%", sep="")) + 
-  annotate("text", x = 0.125, y = 230, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.1 & cum.sum$I< 0.15]), "%", sep="")) + 
-  annotate("text", x = 0.175, y = 83, size = 4, label = paste(range.diff(cum.sum$percentile[cum.sum$I> 0.15]), "%", sep="")) + 
-  theme_bw(15) + theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(), panel.border = element_rect(colour="black", fill = NA, size=1)) + 
-  xlab("Index of sex-specific selection (I)") + ylab("Number of transcripts") + scale_y_continuous(expand = c(0,0), limits = c(0,4600)) + scale_x_continuous(breaks = c(-0.2,-0.15,-0.1,-0.05,0,0.05,0.1,0.15,0.2))
-dev.off()
-
-
-
-
 # FIGURES S1-S3: relative fitness against standardized mean eigengene for each module, for males and females, at the level of hemiclones
 fitness.vs.eigengenes.plot(MEconsensus.clone.data, module.data.consensus, consensus=T)
 fitness.vs.eigengenes.plot(MEfemale.clone.data, module.data.female)
@@ -339,9 +316,7 @@ ggsave("../figures/distance plot - male.eps", boot.distance.plot(male.boots), wi
 
 
 
-
-
-# Snipped text from the paper about connectivity of SA and non-SA genes - I thought this was confusing, and the predictions are not clearly defined enough.
+# Deleted text from the paper about connectivity of SA and non-SA genes - I thought this was confusing, and the predictions are not clearly defined enough.
 
 # %\vspace{4mm} 
 # %\subsection*{Calculating connectivity for each transcript}

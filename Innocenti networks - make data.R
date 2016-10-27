@@ -6,7 +6,6 @@ setwd("~/Dropbox/Data and manuscripts - C 2 copy/Innocenti networks/scripts")
 
 # Also, tell R where you put the raw microarray data (I store this on the hard drive rather than Dropbox, as the files are big)
 # You can get the raw microarray data at: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE17013
-# I recommend you download the data from the link, and put it in a directory called "Innocenti microarray data" on the desktop. Remember to change the filepath's slashes etc if you are on Windows.
 filepath <- "~/Desktop/Innocenti microarray data"
 ###############################
 
@@ -99,8 +98,8 @@ both.net <- blockwiseConsensusModules(multiExpr,
 powers <- 1:16
 
 # As before, male a nice plot to help choose the correct power. 
-# power.picker.plot(ned[sampleID$sex == "female",], powers)
-# power.picker.plot(ned[sampleID$sex == "male",], powers)
+power.picker.plot(ned[sampleID$sex == "female",], powers)
+power.picker.plot(ned[sampleID$sex == "male",], powers)
 
 # These are the powers we get using the plot (those that give >0.9 fit for the scale-free topology model)
 female.power <- 15

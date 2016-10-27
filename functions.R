@@ -70,20 +70,21 @@ compute.SA.score.per.gene <- function(ned, sampleID){
 
 
 # Clean up the dN/dS data kindly provided by C. Fan into a more R-like format
-# clean.up.fan.files <- function(fan.file){
-#   dd<-read.delim(fan.file, header=F, sep = "=")
-#   names(dd) <- c("flybaseID", "t", "S", "N", "dNdS", "dN", "dS")
-#   dd$flybaseID <- gsub("\tt", "", dd$flybaseID)
-#   dd <- as.data.frame(apply(dd, c(1,2), function(x) gsub(" ", "", x)))
-#   dd$t <- gsub("S", "", dd$t)
-#   dd$S <- gsub("N", "", dd$S)
-#   dd$N <- gsub("dN/dS", "", dd$N)
-#   dd$dNdS <- gsub("dN", "", dd$dNdS)
-#   dd$dN <- gsub("dS", "", dd$dN)
-#   split.ID <- strsplit(dd$flybaseID, split="_")
-#   dd$flybaseID <- sapply(split.ID, function(x) x[1])
-#   return(dd)
-# }
+# Note that I removed all mention of dN/dS from the paper for brevity
+clean.up.fan.files <- function(fan.file){
+  dd<-read.delim(fan.file, header=F, sep = "=")
+  names(dd) <- c("flybaseID", "t", "S", "N", "dNdS", "dN", "dS")
+  dd$flybaseID <- gsub("\tt", "", dd$flybaseID)
+  dd <- as.data.frame(apply(dd, c(1,2), function(x) gsub(" ", "", x)))
+  dd$t <- gsub("S", "", dd$t)
+  dd$S <- gsub("N", "", dd$S)
+  dd$N <- gsub("dN/dS", "", dd$N)
+  dd$dNdS <- gsub("dN", "", dd$dNdS)
+  dd$dN <- gsub("dS", "", dd$dN)
+  split.ID <- strsplit(dd$flybaseID, split="_")
+  dd$flybaseID <- sapply(split.ID, function(x) x[1])
+  return(dd)
+}
 
 
 # Function to set up data in the required formats - this keeps the main scripts neat and readable
@@ -188,51 +189,51 @@ power.picker.plot <- function(ned, powers){
 # Function to calculate a big correlation matrix in chunks (when it's too big to do in R's memory)
 # Adapted from http://www.r-bloggers.com/bigcor-large-correlation-matrices-in-r/ - I corrected a typo involving MAT, and I added 2 lines (annotated)
 # I use this because the built-in WGCNA functions for getting connectivity tend to fail for my dataset, since the correlation matrix is too big.
-# bigcor <- function(x, nblocks = 10, verbose = TRUE, make.dissimilarity=F, power)
-# {
-#   library(ff, quietly = TRUE)
-#   NCOL <- ncol(x)
-#   
-#   ## test if ncol(x) %% nblocks gives remainder 0
-#   if (NCOL %% nblocks != 0) stop("Choose different 'nblocks' so that ncol(x) %% nblocks = 0!")
-#   
-#   ## preallocate square matrix of dimension
-#   ## ncol(x) in 'ff' single format
-#   corMAT <- ff(vmode = "single", dim = c(NCOL, NCOL))
-#   
-#   ## split column numbers into 'nblocks' groups
-#   SPLIT <- split(1:NCOL, rep(1:nblocks, each = NCOL/nblocks))
-#   
-#   ## create all unique combinations of blocks
-#   COMBS <- expand.grid(1:length(SPLIT), 1:length(SPLIT))
-#   COMBS <- t(apply(COMBS, 1, sort))
-#   COMBS <- unique(COMBS)
-#   
-#   ## iterate through each block combination, calculate correlation matrix
-#   ## between blocks and store them in the preallocated matrix on both
-#   ## symmetric sides of the diagonal
-#   for (i in 1:nrow(COMBS)) {
-#     COMB <- COMBS[i, ]
-#     G1 <- SPLIT[[COMB[1]]]
-#     G2 <- SPLIT[[COMB[2]]]
-#     if (verbose) cat("Block", COMB[1], "with Block", COMB[2], "\n")
-#     flush.console()
-#     COR <- cor(x[, G1], x[, G2])
-#     
-#     # Luke's addition: added abs() and raise by 'power'
-#     COR <- abs(COR)^power 
-#     
-#     # Luke's addition: set this option to true if you'd like to subtract every correlation from 1, to get a dissimilarity matrix instead of a similarity matrix
-#     if(make.dissimilarity) COR <- 1 - COR 
-#     
-#     corMAT[G1, G2] <- COR
-#     corMAT[G2, G1] <- t(COR)
-#     COR <- NULL
-#   }
-#   
-#   gc()
-#   return(corMAT)
-# }
+bigcor <- function(x, nblocks = 10, verbose = TRUE, make.dissimilarity=F, power)
+{
+  library(ff, quietly = TRUE)
+  NCOL <- ncol(x)
+
+  ## test if ncol(x) %% nblocks gives remainder 0
+  if (NCOL %% nblocks != 0) stop("Choose different 'nblocks' so that ncol(x) %% nblocks = 0!")
+
+  ## preallocate square matrix of dimension
+  ## ncol(x) in 'ff' single format
+  corMAT <- ff(vmode = "single", dim = c(NCOL, NCOL))
+
+  ## split column numbers into 'nblocks' groups
+  SPLIT <- split(1:NCOL, rep(1:nblocks, each = NCOL/nblocks))
+
+  ## create all unique combinations of blocks
+  COMBS <- expand.grid(1:length(SPLIT), 1:length(SPLIT))
+  COMBS <- t(apply(COMBS, 1, sort))
+  COMBS <- unique(COMBS)
+
+  ## iterate through each block combination, calculate correlation matrix
+  ## between blocks and store them in the preallocated matrix on both
+  ## symmetric sides of the diagonal
+  for (i in 1:nrow(COMBS)) {
+    COMB <- COMBS[i, ]
+    G1 <- SPLIT[[COMB[1]]]
+    G2 <- SPLIT[[COMB[2]]]
+    if (verbose) cat("Block", COMB[1], "with Block", COMB[2], "\n")
+    flush.console()
+    COR <- cor(x[, G1], x[, G2])
+
+    # Luke's addition: added abs() and raise by 'power'
+    COR <- abs(COR)^power
+
+    # Luke's addition: set this option to true if you'd like to subtract every correlation from 1, to get a dissimilarity matrix instead of a similarity matrix
+    if(make.dissimilarity) COR <- 1 - COR
+
+    corMAT[G1, G2] <- COR
+    corMAT[G2, G1] <- t(COR)
+    COR <- NULL
+  }
+
+  gc()
+  return(corMAT)
+}
 
 
 # This function calculates the association between mean fitness and mean module eigengenes across hemiclones. Also calculates the I+M2010 index of sex-specific selection I for each module.
@@ -575,57 +576,58 @@ tissue.enrichment.plot <- function(module.data, module.column){
 
 
 # Function to make the connectivity plot
-# gene.connectivity.plot <- function(){
-#   plot.dat <- with(gene.data, data.frame(network = rep(c("Consensus network", "Female network", "Male network"), each = nrow(gene.data)), 
-#                                          k =  c(both.kTotal / max(both.kTotal), 
-#                                                 female.kTotal / max(female.kTotal), 
-#                                                 male.kTotal / max(male.kTotal)), 
-#                                          sex.bias = rep(sex.bias,3),
-#                                          SA.score = rep(SA.score,3)
-#   ))
-#   plot.dat$bias <- "Unbiased"
-#   plot.dat$bias[plot.dat$sex.bias > 1] <- "Female" # sex-biased genes are those with at least 2-fold difference in expression
-#   plot.dat$bias[plot.dat$sex.bias < -1] <- "Male"
-#   plot.dat$bias <- factor(plot.dat$bias, levels = c("Female", "Unbiased", "Male"))
-#   plot.dat$SA <- "Unselected"
-#   plot.dat$SA[plot.dat$SA.score <= -0.05] <- "SA"  # SA genes are those with a score of at least -0.05
-#   plot.dat$SA[plot.dat$SA.score >= 0.05] <- "Concordant"  
-#   plot.dat$SA <- factor(plot.dat$SA, levels = c("SA", "Unselected", "Concordant"))
-#   #dat <- melt(tapply(plot.dat$k, list(plot.dat$network, plot.dat$bias, plot.dat$SA), median))
-#   print(melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), max)))
-#   dat <- melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), median)) %>%
-#     mutate(lower = melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), function(x) quantile(x, prob = 0.025)))[,4]) %>% mutate(higher = melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), function(x) quantile(x, prob = 0.975)))[,4])
-# 
-#   names(dat)[1:4] <- c("SA", "bias", "network", "k")
-#   
-#   ggplot(dat, aes(x = bias, y = k, group=SA)) + geom_errorbar(position=position_dodge(0.5), aes(ymin=lower, ymax=higher), width = 0)  + geom_point(position=position_dodge(0.5), size=4, aes(fill = SA), shape=21)  + theme_bw() + facet_wrap(~network)+ theme(legend.title = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), strip.background = element_rect(fill="white", color="black",size=1), legend.key = element_blank()) + ylab("Relative connectivity \n\u00B1 95% quantiles") + xlab("Sex bias in expression") + scale_y_continuous(limits=c(0,1)) + scale_fill_manual(values=c("purple", "white", "yellow")) 
-# }
+# Note: this plot was removed from the finished paper
+gene.connectivity.plot <- function(){
+  plot.dat <- with(gene.data, data.frame(network = rep(c("Consensus network", "Female network", "Male network"), each = nrow(gene.data)),
+                                         k =  c(both.kTotal / max(both.kTotal),
+                                                female.kTotal / max(female.kTotal),
+                                                male.kTotal / max(male.kTotal)),
+                                         sex.bias = rep(sex.bias,3),
+                                         SA.score = rep(SA.score,3)
+  ))
+  plot.dat$bias <- "Unbiased"
+  plot.dat$bias[plot.dat$sex.bias > 1] <- "Female" # sex-biased genes are those with at least 2-fold difference in expression
+  plot.dat$bias[plot.dat$sex.bias < -1] <- "Male"
+  plot.dat$bias <- factor(plot.dat$bias, levels = c("Female", "Unbiased", "Male"))
+  plot.dat$SA <- "Unselected"
+  plot.dat$SA[plot.dat$SA.score <= -0.05] <- "SA"  # SA genes are those with a score of at least -0.05
+  plot.dat$SA[plot.dat$SA.score >= 0.05] <- "Concordant"
+  plot.dat$SA <- factor(plot.dat$SA, levels = c("SA", "Unselected", "Concordant"))
+  #dat <- melt(tapply(plot.dat$k, list(plot.dat$network, plot.dat$bias, plot.dat$SA), median))
+  print(melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), max)))
+  dat <- melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), median)) %>%
+    mutate(lower = melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), function(x) quantile(x, prob = 0.025)))[,4]) %>% mutate(higher = melt(tapply(plot.dat$k, list(plot.dat$SA, plot.dat$bias, plot.dat$network), function(x) quantile(x, prob = 0.975)))[,4])
+
+  names(dat)[1:4] <- c("SA", "bias", "network", "k")
+
+  ggplot(dat, aes(x = bias, y = k, group=SA)) + geom_errorbar(position=position_dodge(0.5), aes(ymin=lower, ymax=higher), width = 0)  + geom_point(position=position_dodge(0.5), size=4, aes(fill = SA), shape=21)  + theme_bw() + facet_wrap(~network)+ theme(legend.title = element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_rect(colour="black",size=1), strip.background = element_rect(fill="white", color="black",size=1), legend.key = element_blank()) + ylab("Relative connectivity \n\u00B1 95% quantiles") + xlab("Sex bias in expression") + scale_y_continuous(limits=c(0,1)) + scale_fill_manual(values=c("purple", "white", "yellow"))
+}
 
 
 # Function by Hadley Wickham that makes multiple ggplots that share a legend (used for the connectedness plot). Source: https://github.com/hadley/ggplot2/wiki/Share-a-legend-between-two-ggplot2-graphs
-# grid_arrange_shared_legend <- function(..., ncol = length(list(...)), nrow = 1, position = c("bottom", "right")) {
-#   
-#   plots <- list(...)
-#   position <- match.arg(position)
-#   g <- ggplotGrob(plots[[1]] + theme(legend.position = position))$grobs
-#   legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
-#   lheight <- sum(legend$height)
-#   lwidth <- sum(legend$width)
-#   gl <- lapply(plots, function(x) x + theme(legend.position="none"))
-#   gl <- c(gl, ncol = ncol, nrow = nrow)
-#   
-#   combined <- switch(position,
-#                      "bottom" = arrangeGrob(do.call(arrangeGrob, gl),
-#                                             legend,
-#                                             ncol = 1,
-#                                             heights = unit.c(unit(1, "npc") - lheight, lheight)),
-#                      "right" = arrangeGrob(do.call(arrangeGrob, gl),
-#                                            legend,
-#                                            ncol = 2,
-#                                            widths = unit.c(unit(1, "npc") - lwidth, lwidth)))
-#   grid.newpage()
-#   grid.draw(combined)
-# }
+grid_arrange_shared_legend <- function(..., ncol = length(list(...)), nrow = 1, position = c("bottom", "right")) {
+
+  plots <- list(...)
+  position <- match.arg(position)
+  g <- ggplotGrob(plots[[1]] + theme(legend.position = position))$grobs
+  legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+  lheight <- sum(legend$height)
+  lwidth <- sum(legend$width)
+  gl <- lapply(plots, function(x) x + theme(legend.position="none"))
+  gl <- c(gl, ncol = ncol, nrow = nrow)
+
+  combined <- switch(position,
+                     "bottom" = arrangeGrob(do.call(arrangeGrob, gl),
+                                            legend,
+                                            ncol = 1,
+                                            heights = unit.c(unit(1, "npc") - lheight, lheight)),
+                     "right" = arrangeGrob(do.call(arrangeGrob, gl),
+                                           legend,
+                                           ncol = 2,
+                                           widths = unit.c(unit(1, "npc") - lwidth, lwidth)))
+  grid.newpage()
+  grid.draw(combined)
+}
 
 
 # Function to make plot showing that male-benefitting and female-benefitting transcripts are clustered, and these modules tend to be SA (Figure 3)
